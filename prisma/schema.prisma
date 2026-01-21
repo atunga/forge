@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Customer accounts
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique // Customer account code
+  address   String?
+  city      String?
+  state     String?
+  zip       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendingStations VendingStation[]
+  recommendations Recommendation[]
+
+  @@map("customers")
+}
+
+// Vending stations/cribs at customer locations
+model VendingStation {
+  id           String            @id @default(cuid())
+  customerId   String
+  name         String // Station name/identifier
+  location     String? // Physical location description
+  vendingType  VendingSystemType
+  externalId   String? // ID in the vending system (AutoCrib/CribMaster)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  stationItems StationItem[]
+
+  @@unique([customerId, name])
+  @@map("vending_stations")
+}
+
+enum VendingSystemType {
+  AUTOCRIB
+  CRIBMASTER
+  OTHER
+}
+
+// Product/Item catalog
+model Item {
+  id              String   @id @default(cuid())
+  partNumber      String   @unique
+  description     String
+  manufacturer    String?
+  category        String?
+  unitOfMeasure   String   @default("EA") // Always EACH
+  standardPackQty Int      @default(1) // Standard package quantity
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stationItems      StationItem[]
+  erpInventory      ErpInventory[]
+  usageTransactions UsageTransaction[]
+  purchaseOrders    PurchaseOrderLine[]
+  recommendations   Recommendation[]
+
+  @@map("items")
+}
+
+// Item placement in vending stations
+model StationItem {
+  id              String   @id @default(cuid())
+  stationId       String
+  itemId          String
+  quantityOnHand  Int      @default(0)
+  currentMin      Int      @default(0)
+  currentMax      Int      @default(0)
+  packageQty      Int      @default(1) // Package qty in this station
+  quantityOnOrder Int      @default(0)
+  numberOfBins    Int      @default(1)
+  binLocations    String? // Comma-separated bin locations
+  lastUpdated     DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  station VendingStation     @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  item    Item               @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  usage   UsageTransaction[]
+
+  @@unique([stationId, itemId])
+  @@map("station_items")
+}
+
+// Historical usage/dispensing records
+model UsageTransaction {
+  id            String   @id @default(cuid())
+  stationItemId String
+  itemId        String
+  quantity      Int
+  transactionAt DateTime
+  userId        String? // User who dispensed (if available)
+  jobNumber     String? // Job/work order reference
+  createdAt     DateTime @default(now())
+
+  stationItem StationItem @relation(fields: [stationItemId], references: [id], onDelete: Cascade)
+  item        Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([stationItemId, transactionAt])
+  @@index([itemId, transactionAt])
+  @@map("usage_transactions")
+}
+
+// ERP inventory levels by branch
+model ErpInventory {
+  id             String   @id @default(cuid())
+  itemId         String
+  branchId       String
+  branchName     String
+  quantityOnHand Int      @default(0)
+  quantityOnOrder Int     @default(0) // Qty on order to replenish this branch
+  reorderPoint   Int?
+  lastUpdated    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, branchId])
+  @@map("erp_inventory")
+}
+
+// Purchase orders from suppliers
+model PurchaseOrder {
+  id                  String   @id @default(cuid())
+  poNumber            String   @unique
+  supplierId          String
+  supplierName        String
+  orderDate           DateTime
+  expectedDeliveryDate DateTime?
+  status              POStatus @default(OPEN)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  lines PurchaseOrderLine[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  itemId          String
+  quantityOrdered Int
+  quantityReceived Int     @default(0)
+  unitCost        Decimal? @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_lines")
+}
+
+enum POStatus {
+  OPEN
+  PARTIAL
+  CLOSED
+  CANCELLED
+}
+
+// Generated min/max recommendations
+model Recommendation {
+  id                     String   @id @default(cuid())
+  customerId             String
+  itemId                 String
+  stationId              String?  // Null for warehouse recommendations
+
+  // Usage analysis
+  avgDailyUsage          Decimal  @db.Decimal(10, 4)
+  usageDays              Int      // Number of days analyzed
+
+  // Current settings (vending)
+  currentMin             Int?
+  currentMax             Int?
+  currentQtyOnHand       Int?
+  packageQty             Int      @default(1)
+
+  // Recommendations (vending)
+  recommendedMin         Int
+  recommendedMax         Int
+
+  // Warehouse backup recommendation
+  warehouseBackupQty     Int?
+  supplierLeadTimeDays   Int?
+
+  // Status
+  status                 RecommendationStatus @default(PENDING)
+  appliedAt              DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, status])
+  @@map("recommendations")
+}
+
+enum RecommendationStatus {
+  PENDING
+  APPROVED
+  APPLIED
+  REJECTED
+}
+
+// Supplier information for lead time tracking
+model Supplier {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  leadTimeDays  Int      @default(7) // Default supplier lead time
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("suppliers")
+}

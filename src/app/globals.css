@@ -1,26 +1,385 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
+/* Industrial Forge Theme */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-outfit);
+  --font-mono: var(--font-jetbrains);
+  --font-display: var(--font-bebas);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-copper: var(--copper);
+  --color-copper-light: var(--copper-light);
+  --color-copper-dark: var(--copper-dark);
+  --color-steel: var(--steel);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-critical: var(--status-critical);
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
+  --radius-3xl: 10px;
+  --radius-4xl: 12px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Dark Industrial Theme - Always Dark */
+:root {
+  --radius: 4px;
+
+  /* Core backgrounds - deep charcoal slate */
+  --background: #0a0c0f;
+  --foreground: #e8e9eb;
+
+  /* Card surfaces - layered depths */
+  --card: #12151a;
+  --card-foreground: #e8e9eb;
+  --card-elevated: #181c23;
+
+  /* Popover */
+  --popover: #181c23;
+  --popover-foreground: #e8e9eb;
+
+  /* Primary - warm copper/amber */
+  --primary: #d4883a;
+  --primary-foreground: #0a0c0f;
+
+  /* Secondary - cool steel */
+  --secondary: #1e2430;
+  --secondary-foreground: #a8adb8;
+
+  /* Muted */
+  --muted: #1a1e26;
+  --muted-foreground: #6b7280;
+
+  /* Accent */
+  --accent: #252b38;
+  --accent-foreground: #e8e9eb;
+
+  /* Destructive */
+  --destructive: #dc2626;
+
+  /* Borders - subtle steel lines */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --input: #1e2430;
+  --ring: #d4883a;
+
+  /* Copper palette */
+  --copper: #d4883a;
+  --copper-light: #e9a85c;
+  --copper-dark: #b36f2a;
+
+  /* Steel accents */
+  --steel: #4a5568;
+  --steel-light: #718096;
+
+  /* Status indicators */
+  --status-ok: #10b981;
+  --status-warn: #f59e0b;
+  --status-critical: #ef4444;
+  --status-info: #3b82f6;
+
+  /* Chart colors - industrial palette */
+  --chart-1: #d4883a;
+  --chart-2: #10b981;
+  --chart-3: #3b82f6;
+  --chart-4: #8b5cf6;
+  --chart-5: #ec4899;
+
+  /* Sidebar */
+  --sidebar: #0d0f13;
+  --sidebar-foreground: #e8e9eb;
+  --sidebar-primary: #d4883a;
+  --sidebar-primary-foreground: #0a0c0f;
+  --sidebar-accent: #1a1e26;
+  --sidebar-accent-foreground: #e8e9eb;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #d4883a;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Industrial grid background */
+  .forge-grid {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Subtle noise texture overlay */
+  .forge-texture::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   }
 }
 
-body {
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
   background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--steel);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--steel-light);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(212, 136, 58, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(212, 136, 58, 0.3);
+  }
+}
+
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
+.animate-count-up {
+  animation: count-up 0.4s ease-out forwards;
+}
+
+/* Staggered animation delays */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+
+/* Status indicator dot */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot-ok {
+  background: var(--status-ok);
+  box-shadow: 0 0 8px var(--status-ok);
+}
+
+.status-dot-warn {
+  background: var(--status-warn);
+  box-shadow: 0 0 8px var(--status-warn);
+}
+
+.status-dot-critical {
+  background: var(--status-critical);
+  box-shadow: 0 0 8px var(--status-critical);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Industrial card styling */
+.forge-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.forge-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--copper), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.forge-card:hover::before {
+  opacity: 1;
+}
+
+/* Data display styling */
+.data-value {
+  font-family: var(--font-jetbrains), monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Table row hover effect */
+.forge-table-row {
+  transition: background-color 0.15s ease;
+}
+
+.forge-table-row:hover {
+  background: rgba(212, 136, 58, 0.05);
+}
+
+/* Industrial button glow */
+.forge-btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.forge-btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, var(--copper-dark), var(--copper), var(--copper-light), var(--copper));
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.forge-btn-primary:hover::after {
+  opacity: 0.5;
+}
+
+/* Corner accent marks */
+.corner-mark {
+  position: relative;
+}
+
+.corner-mark::before,
+.corner-mark::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--copper);
+  opacity: 0.5;
+}
+
+.corner-mark::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.corner-mark::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+/* Monospace numbers in tables */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Selection styling */
+::selection {
+  background: rgba(212, 136, 58, 0.3);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: 2px;
+}
+
+/* Input styling overrides */
+input[type="text"],
+input[type="search"],
+input[type="number"] {
+  background: var(--input);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+}
+
+input::placeholder {
+  color: var(--muted-foreground);
+}
+
+input:focus {
+  border-color: var(--copper);
+  box-shadow: 0 0 0 2px rgba(212, 136, 58, 0.1);
 }
