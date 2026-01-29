@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
 import { ForgeLayout, StatCard, SectionHeader, EmptyState } from "@/components/forge-layout";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -13,10 +15,119 @@ import {
   Warehouse,
   ChevronRight,
   Database,
+  Search,
+  X,
 } from "lucide-react";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { data: customers, isLoading } = trpc.customers.list.useQuery();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Filter customers based on search query
+  const filteredCustomers = customers?.filter((customer) => {
+    if (!searchQuery.trim()) return false;
+    const query = searchQuery.toLowerCase();
+    return (
+      customer.name.toLowerCase().includes(query) ||
+      customer.code.toLowerCase().includes(query)
+    );
+  }).slice(0, 8) ?? [];
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Reset selected index when results change
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [filteredCustomers.length]);
+
+  // Get the best autofill match
+  const getAutofillMatch = () => {
+    if (!searchQuery.trim() || !customers) return null;
+    const query = searchQuery.toLowerCase();
+
+    // Find first customer whose name or code starts with the query
+    const match = customers.find((customer) =>
+      customer.name.toLowerCase().startsWith(query) ||
+      customer.code.toLowerCase().startsWith(query)
+    );
+
+    if (match) {
+      // Return the matching field (name or code)
+      if (match.name.toLowerCase().startsWith(query)) {
+        return { customer: match, suggestion: match.name };
+      } else {
+        return { customer: match, suggestion: match.code };
+      }
+    }
+    return null;
+  };
+
+  const autofillMatch = getAutofillMatch();
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Tab accepts autofill and navigates to customer
+    if (e.key === "Tab" && autofillMatch) {
+      e.preventDefault();
+      router.push(`/customers/${autofillMatch.customer.id}`);
+      setSearchQuery("");
+      setIsSearchOpen(false);
+      return;
+    }
+
+    // Right arrow at end of input accepts autofill text
+    if (e.key === "ArrowRight" && autofillMatch && inputRef.current) {
+      const cursorPos = inputRef.current.selectionStart ?? 0;
+      if (cursorPos === searchQuery.length) {
+        e.preventDefault();
+        setSearchQuery(autofillMatch.suggestion);
+        return;
+      }
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (filteredCustomers.length > 0) {
+        setSelectedIndex((prev) => (prev + 1) % filteredCustomers.length);
+      }
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (filteredCustomers.length > 0) {
+        setSelectedIndex((prev) => (prev - 1 + filteredCustomers.length) % filteredCustomers.length);
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filteredCustomers.length > 0) {
+        const selected = filteredCustomers[selectedIndex];
+        if (selected) {
+          router.push(`/customers/${selected.id}`);
+          setSearchQuery("");
+          setIsSearchOpen(false);
+        }
+      } else if (autofillMatch) {
+        router.push(`/customers/${autofillMatch.customer.id}`);
+        setSearchQuery("");
+        setIsSearchOpen(false);
+      }
+    } else if (e.key === "Escape") {
+      setIsSearchOpen(false);
+      inputRef.current?.blur();
+    }
+  };
 
   const totalCustomers = customers?.length ?? 0;
   const totalStations = customers?.reduce((acc, c) => acc + c.vendingStations.length, 0) ?? 0;
@@ -81,7 +192,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick actions bar */}
-        <div className="forge-card rounded-lg p-4 mb-10 opacity-0 animate-fade-in-up stagger-5">
+        <div className="forge-card rounded-lg p-4 mb-10 opacity-0 animate-fade-in-up stagger-5 relative z-20" style={{ overflow: 'visible' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-3">
@@ -98,12 +209,109 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
-            <Link href="/customers">
-              <Button className="bg-[var(--copper)] hover:bg-[var(--copper-light)] text-[var(--background)] font-medium gap-2">
-                View All Customers
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <div className="flex items-center gap-3">
+              {/* Customer Search */}
+              <div ref={searchRef} className="relative">
+                <div className="relative w-[280px] rounded-lg bg-[var(--background)] border border-[var(--border)] focus-within:border-[var(--copper)]/50 focus-within:ring-1 focus-within:ring-[var(--copper)]/20 transition-colors">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)] z-10" />
+
+                  {/* Autofill suggestion - shown behind input text */}
+                  <div className="absolute inset-0 pl-9 pr-8 py-2 pointer-events-none flex items-center overflow-hidden">
+                    <span className="text-sm whitespace-nowrap">
+                      {autofillMatch && searchQuery.length > 0 ? (
+                        <>
+                          <span className="text-transparent">{searchQuery}</span>
+                          <span className="text-[var(--muted-foreground)]/60">
+                            {autofillMatch.suggestion.slice(searchQuery.length)}
+                          </span>
+                        </>
+                      ) : null}
+                    </span>
+                  </div>
+
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsSearchOpen(e.target.value.length > 0);
+                    }}
+                    onFocus={() => searchQuery.length > 0 && setIsSearchOpen(true)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Search customers..."
+                    className="relative w-full pl-9 pr-8 py-2 rounded-lg bg-transparent text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none border-none"
+                    autoComplete="off"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setIsSearchOpen(false);
+                        inputRef.current?.focus();
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors z-10"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Search Results Dropdown */}
+                {isSearchOpen && filteredCustomers.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl z-[100] overflow-hidden">
+                    {filteredCustomers.map((customer, index) => (
+                      <button
+                        key={customer.id}
+                        onClick={() => {
+                          router.push(`/customers/${customer.id}`);
+                          setSearchQuery("");
+                          setIsSearchOpen(false);
+                        }}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                          index === selectedIndex
+                            ? "bg-[var(--copper)]/10"
+                            : "hover:bg-[var(--accent)]"
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded bg-[var(--accent)] flex items-center justify-center">
+                          <Users className="w-4 h-4 text-[var(--copper)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                            {customer.name}
+                          </p>
+                          <p className="text-xs text-[var(--muted-foreground)] font-[family-name:var(--font-jetbrains)]">
+                            {customer.code}
+                            {customer.city && customer.state && (
+                              <span className="ml-2">• {customer.city}, {customer.state}</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="text-xs text-[var(--muted-foreground)]">
+                          {customer.vendingStations.length} stations
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* No Results Message */}
+                {isSearchOpen && searchQuery.length > 0 && filteredCustomers.length === 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl z-[100] p-4 text-center">
+                    <p className="text-sm text-[var(--muted-foreground)]">No customers found</p>
+                  </div>
+                )}
+              </div>
+
+              <Link href="/customers">
+                <Button className="bg-[var(--copper)] hover:bg-[var(--copper-light)] text-[var(--background)] font-medium gap-2">
+                  View All Customers
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
 
