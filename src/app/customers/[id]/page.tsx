@@ -59,6 +59,7 @@ export default function CustomerDetailPage() {
 
   // Order modal state
   type OrderItem = {
+    itemId: string;
     partNumber: string;
     description: string;
     orderQty: number;
@@ -86,7 +87,7 @@ export default function CustomerDetailPage() {
   const [orderHistory, setOrderHistory] = useState<StoredOrder[]>([]);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
-  // Load order history from localStorage on mount
+  // Load order history from localStorage on mount (fallback for legacy orders)
   useEffect(() => {
     const stored = localStorage.getItem(`forge-orders-${customerId}`);
     if (stored) {
@@ -98,8 +99,22 @@ export default function CustomerDetailPage() {
     }
   }, [customerId]);
 
-  // Save order to history
+  // Save order to history (backend + localStorage fallback)
   const saveOrderToHistory = (order: OrderData, customerName: string) => {
+    // Save to backend demo ERP
+    createSalesOrderMutation.mutate({
+      customerId,
+      stationId: order.stationId,
+      vendingPO: order.vendingPO,
+      items: order.items.map(item => ({
+        itemId: item.itemId,
+        partNumber: item.partNumber,
+        description: item.description,
+        orderQty: item.orderQty,
+      })),
+    });
+
+    // Also keep localStorage for backwards compat
     const storedOrder: StoredOrder = {
       ...order,
       id: `${order.vendingPO}-${order.erpSalesOrder}`,
@@ -118,11 +133,50 @@ export default function CustomerDetailPage() {
   const { data: recommendations, refetch: refetchRecommendations } =
     trpc.recommendations.getByCustomer.useQuery({ customerId, status: "PENDING" });
 
+  const utils = trpc.useUtils();
+  const { data: backendOrders } = trpc.demo.getOrders.useQuery({ customerId });
+
+  const createSalesOrderMutation = trpc.demo.createSalesOrder.useMutation({
+    onSuccess: () => {
+      utils.demo.getOrders.invalidate({ customerId });
+      utils.customers.getById.invalidate({ id: customerId });
+      utils.erp.getCustomerItemsInventory.invalidate({ customerId });
+    },
+  });
+
   const generateMutation = trpc.recommendations.generate.useMutation({
     onSuccess: () => {
       refetchRecommendations();
     },
   });
+
+  // Merge backend orders with localStorage orders, deduplicating by vendingPO
+  const mergedOrderHistory = (() => {
+    const backendMapped: StoredOrder[] = (backendOrders ?? []).map((o) => ({
+      id: o.id,
+      vendingPO: o.vendingPO,
+      erpSalesOrder: o.soNumber,
+      stationName: o.stationName,
+      stationId: o.stationId,
+      customerId: o.customerId,
+      customerName: customer?.name ?? "",
+      items: o.lines.map((line) => ({
+        itemId: line.itemId,
+        partNumber: line.partNumber,
+        description: line.description,
+        orderQty: line.orderQty,
+        min: 0,
+        max: 0,
+        pkgQty: 1,
+      })),
+      createdAt: o.orderDate instanceof Date ? o.orderDate.toISOString() : String(o.orderDate),
+    }));
+    const backendPOs = new Set(backendMapped.map(o => o.vendingPO));
+    const localOnly = orderHistory.filter(o => !backendPOs.has(o.vendingPO));
+    return [...backendMapped, ...localOnly].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  })();
 
   const handleGenerateRecommendations = () => {
     generateMutation.mutate({ customerId, usageDays: 90, supplierLeadTimeDays: 14 });
@@ -353,6 +407,7 @@ export default function CustomerDetailPage() {
     const orderItems: OrderItem[] = stationItems
       .filter(item => selectedItems.has(item.stationItem.id))
       .map(({ stationItem: si, suggestedQty }) => ({
+        itemId: si.itemId,
         partNumber: si.item.partNumber,
         description: si.item.description,
         orderQty: getReorderQty(si.id, suggestedQty),
@@ -609,9 +664,9 @@ export default function CustomerDetailPage() {
               >
                 <History className="w-4 h-4 mr-2" />
                 Order History
-                {orderHistory.length > 0 && (
+                {mergedOrderHistory.length > 0 && (
                   <span className="ml-1 px-1.5 py-0.5 text-xs rounded bg-[var(--muted-foreground)]/20 text-[var(--foreground)]">
-                    {orderHistory.length}
+                    {mergedOrderHistory.length}
                   </span>
                 )}
               </TabsTrigger>
@@ -757,18 +812,6 @@ export default function CustomerDetailPage() {
                       {/* Station header */}
                       <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          {/* Select all checkbox */}
-                          <button
-                            onClick={() => toggleStationSelection(stationId)}
-                            className="flex items-center justify-center w-5 h-5 rounded border border-[var(--border)] hover:border-[var(--copper)] transition-colors"
-                            style={{
-                              backgroundColor: allSelected ? 'var(--copper)' : partialSelected ? 'var(--copper)' : 'transparent',
-                              borderColor: allSelected || partialSelected ? 'var(--copper)' : undefined,
-                            }}
-                          >
-                            {allSelected && <Check className="w-3 h-3 text-[var(--background)]" />}
-                            {partialSelected && !allSelected && <Minus className="w-3 h-3 text-[var(--background)]" />}
-                          </button>
                           <div className="w-10 h-10 rounded bg-[var(--copper)]/10 flex items-center justify-center">
                             <Warehouse className="w-5 h-5 text-[var(--copper)]" />
                           </div>
@@ -802,7 +845,6 @@ export default function CustomerDetailPage() {
                         <table className="w-full">
                           <thead className="sticky top-0 z-10">
                             <tr className="border-b border-[var(--border)] bg-[var(--card)]">
-                              <th className="text-left px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)] w-12"></th>
                               <th className="text-left px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)]">Part Number</th>
                               <th className="text-left px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)]">Description</th>
                               <th className="text-right px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)]">QOH</th>
@@ -813,6 +855,19 @@ export default function CustomerDetailPage() {
                               <th className="text-right px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)]">ERP QOH</th>
                               <th className="text-left px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)]">Inbound POs</th>
                               <th className="text-right px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)]">Order Qty</th>
+                              <th className="text-center px-6 py-3 text-xs uppercase tracking-wider text-[var(--muted-foreground)] font-medium bg-[var(--card)] w-12">
+                                <button
+                                  onClick={() => toggleStationSelection(stationId)}
+                                  className="flex items-center justify-center w-5 h-5 rounded border border-[var(--border)] hover:border-[var(--copper)] transition-colors mx-auto"
+                                  style={{
+                                    backgroundColor: allSelected ? 'var(--copper)' : partialSelected ? 'var(--copper)' : 'transparent',
+                                    borderColor: allSelected || partialSelected ? 'var(--copper)' : undefined,
+                                  }}
+                                >
+                                  {allSelected && <Check className="w-3 h-3 text-[var(--background)]" />}
+                                  {partialSelected && !allSelected && <Minus className="w-3 h-3 text-[var(--background)]" />}
+                                </button>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -833,18 +888,6 @@ export default function CustomerDetailPage() {
                                     isSelected ? "bg-[var(--copper)]/10" : isCritical ? "bg-[var(--status-critical)]/5" : isLow ? "bg-[var(--status-warn)]/5" : ""
                                   }`}
                                 >
-                                  <td className="px-6 py-3">
-                                    <button
-                                      onClick={() => toggleItemSelection(si.id)}
-                                      className="flex items-center justify-center w-5 h-5 rounded border transition-colors"
-                                      style={{
-                                        backgroundColor: isSelected ? 'var(--copper)' : 'transparent',
-                                        borderColor: isSelected ? 'var(--copper)' : 'var(--border)',
-                                      }}
-                                    >
-                                      {isSelected && <Check className="w-3 h-3 text-[var(--background)]" />}
-                                    </button>
-                                  </td>
                                   <td className="px-6 py-3">
                                     <span className="font-[family-name:var(--font-jetbrains)] text-sm text-[var(--foreground)]">
                                       {si.item.partNumber}
@@ -943,6 +986,18 @@ export default function CustomerDetailPage() {
                                       )}
                                     </div>
                                   </td>
+                                  <td className="px-6 py-3 text-center">
+                                    <button
+                                      onClick={() => toggleItemSelection(si.id)}
+                                      className="flex items-center justify-center w-5 h-5 rounded border transition-colors mx-auto"
+                                      style={{
+                                        backgroundColor: isSelected ? 'var(--copper)' : 'transparent',
+                                        borderColor: isSelected ? 'var(--copper)' : 'var(--border)',
+                                      }}
+                                    >
+                                      {isSelected && <Check className="w-3 h-3 text-[var(--background)]" />}
+                                    </button>
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -982,16 +1037,16 @@ export default function CustomerDetailPage() {
                       </p>
                     </div>
                   </div>
-                  {orderHistory.length > 0 && (
+                  {mergedOrderHistory.length > 0 && (
                     <div className="text-sm text-[var(--muted-foreground)]">
-                      <span className="font-[family-name:var(--font-jetbrains)] text-[var(--foreground)]">{orderHistory.length}</span> orders
+                      <span className="font-[family-name:var(--font-jetbrains)] text-[var(--foreground)]">{mergedOrderHistory.length}</span> orders
                     </div>
                   )}
                 </div>
 
-                {orderHistory.length > 0 ? (
+                {mergedOrderHistory.length > 0 ? (
                   <div className="divide-y divide-[var(--border)]">
-                    {orderHistory.map((order) => {
+                    {mergedOrderHistory.map((order) => {
                       const isExpanded = expandedOrderId === order.id;
                       const orderDate = new Date(order.createdAt);
 
